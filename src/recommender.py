@@ -123,14 +123,11 @@ class CineMatchEngine:
             dtype=np.float32
         )
 
-        self.item_similarity = cosine_similarity(
-            self.user_item_matrix.T
-        )
-
-        np.fill_diagonal(
-            self.item_similarity,
-            0.0
-        )
+        # Do NOT build a full dense item-item similarity matrix here.
+        # MovieLens-small has thousands of movies, so a dense NxN matrix
+        # consumes a large amount of RAM on Streamlit Cloud.
+        # Similarities are calculated on-demand for the requested movie(s).
+        self.item_similarity = None
 
         popularity = (
             self.ratings
@@ -324,9 +321,11 @@ class CineMatchEngine:
             self.content_matrix
         ).ravel()
 
-        collaborative_scores = (
-            self.item_similarity[movie_index]
-        )
+        collaborative_scores = cosine_similarity(
+            self.user_item_matrix.T[movie_index],
+            self.user_item_matrix.T
+        ).ravel()
+        collaborative_scores[movie_index] = 0.0
 
         content_scores = self.normalize(
             content_scores
@@ -512,10 +511,13 @@ class CineMatchEngine:
             self.content_matrix
         ).ravel()
 
+        liked_item_matrix = self.user_item_matrix.T[liked_indices]
+        liked_item_similarities = cosine_similarity(
+            liked_item_matrix,
+            self.user_item_matrix.T
+        )
         collaborative_scores = np.average(
-            self.item_similarity[
-                liked_indices
-            ],
+            liked_item_similarities,
             axis=0,
             weights=weights
         )
@@ -648,4 +650,3 @@ def precision_recall_ndcg_at_k(
     )
 
     return precision, recall, ndcg
-
